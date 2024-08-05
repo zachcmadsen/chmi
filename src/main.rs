@@ -97,9 +97,6 @@ fn main() {
 
     println!("Capabilities:");
     for handle in &physical_monitor_handles {
-        // TODO: Fetch capabilities strings on separate threads since each
-        // call to CapabilitiesRequestAndCapabilitiesReply seems to take a
-        // couple seconds.
         print_capabilities_string(handle);
     }
 
