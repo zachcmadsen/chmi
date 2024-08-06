@@ -65,6 +65,8 @@ fn get_physical_monitor_handles() -> Vec<HANDLE> {
 
 fn print_capabilities_string(handle: &HANDLE) {
     // TODO: Check capabilities functions' return values.
+    // TODO: Add retries for capabilities functions failures. I've seen
+    // transient failures on my machine.
     unsafe {
         let mut capabilities_str_len: u32 = 0;
         GetCapabilitiesStringLength(
