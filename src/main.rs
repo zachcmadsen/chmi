@@ -1,4 +1,4 @@
-use std::{ptr, slice};
+use std::{ffi::CString, ptr, slice};
 
 use windows::Win32::{
     Devices::Display::{
@@ -63,16 +63,20 @@ fn get_physical_monitor_handles() -> Vec<HANDLE> {
     physical_monitor_handles
 }
 
-fn print_capabilities_string(handle: &HANDLE) {
+fn get_capabilities_string(handle: &HANDLE) -> Option<CString> {
     // TODO: Check capabilities functions' return values.
-    // TODO: Add retries for capabilities functions failures. I've seen
-    // transient failures on my machine.
     unsafe {
         let mut capabilities_str_len: u32 = 0;
         GetCapabilitiesStringLength(
             *handle,
             ptr::addr_of_mut!(capabilities_str_len),
         );
+
+        // TODO: Add retries for capabilities functions failures. I've seen
+        // transient failures on my machine.
+        if capabilities_str_len == 0 {
+            return None;
+        }
 
         let mut capabilities_str =
             Vec::with_capacity(capabilities_str_len as usize);
@@ -88,9 +92,15 @@ fn print_capabilities_string(handle: &HANDLE) {
         // CapabilitiesRequestAndCapabilitiesReply.
         capabilities_str.set_len(capabilities_str_len as usize);
 
-        // The capabilities should always be an ASCII string, but validate
-        // it just to be sure.
-        println!("{}\n", String::from_utf8(capabilities_str).unwrap());
+        // Sometimes there's an extra nul byte (?). Find the first one and
+        // truncate the rest.
+        let nul_position =
+            capabilities_str.iter().position(|&b| b == b'\0').unwrap();
+        if nul_position < (capabilities_str.len() - 1) {
+            capabilities_str.truncate(nul_position + 1);
+        }
+
+        CString::from_vec_with_nul(capabilities_str).ok()
     }
 }
 
@@ -99,7 +109,9 @@ fn main() {
 
     println!("Capabilities:");
     for handle in &physical_monitor_handles {
-        print_capabilities_string(handle);
+        if let Some(capabilities_string) = get_capabilities_string(handle) {
+            println!("{:?}", capabilities_string);
+        }
     }
 
     unsafe {
