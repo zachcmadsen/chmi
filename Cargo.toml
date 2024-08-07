@@ -4,4 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+logos = "0.14.1"
+thiserror = "1.0.63"
 windows = { version = "0.58.0", features = ["Win32_Devices_Display", "Win32_Graphics_Gdi"] }
+
+[dev-dependencies]
+insta = "1.39.0"
+
+# It's recommended to always compile insta with optimizations:
+# https://insta.rs/docs/quickstart/#optional-faster-runs
+[profile.dev.package]
+insta.opt-level = 3
+similar.opt-level = 3
