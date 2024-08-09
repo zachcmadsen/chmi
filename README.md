@@ -1,1 +1,1 @@
-# monitor-switcher
+# chmi
