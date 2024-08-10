@@ -53,9 +53,6 @@ impl<'a> CapabilitiesStringParser<'a> {
             match self.next()? {
                 Token::Vcp => capabilites.vcp = Some(self.parse_vcp()?),
                 Token::Unknown => {
-                    // TODO: Skipping a capability this way breaks if it has a
-                    // right paren in its value, e.g., vcp. Look ahead to see if
-                    // there's a matching right paren?
                     self.expect(Token::LeftParen)?;
                     self.eat_until(Token::RightParen);
                     self.expect(Token::RightParen)?;
@@ -132,7 +129,7 @@ impl<'a> CapabilitiesStringParser<'a> {
     }
 
     /// Returns true if the next token is `token`.
-    fn check(&mut self, token: Token) -> bool {
+    fn check(&self, token: Token) -> bool {
         self.tokens.get(self.index).is_some_and(|&t| t == token)
     }
 
