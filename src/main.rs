@@ -3,6 +3,7 @@ mod parse;
 
 use std::{ffi::CString, ptr, slice};
 
+use argh::FromArgs;
 use windows::Win32::{
     Devices::Display::{
         CapabilitiesRequestAndCapabilitiesReply, DestroyPhysicalMonitor,
@@ -107,7 +108,25 @@ fn get_capabilities_string(handle: &HANDLE) -> Option<CString> {
     }
 }
 
+#[derive(FromArgs)]
+#[argh(description = "chmi - change monitor input")]
+struct Args {
+    #[argh(switch, short = 'v', description = "use verbose output")]
+    _verbose: bool,
+
+    #[argh(switch, description = "print version information")]
+    version: bool,
+}
+
 fn main() {
+    let args: Args = argh::from_env();
+
+    if args.version {
+        // TODO: Print the commit hash too.
+        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+        return;
+    }
+
     let physical_monitor_handles = get_physical_monitor_handles();
 
     println!("Capabilities:");
