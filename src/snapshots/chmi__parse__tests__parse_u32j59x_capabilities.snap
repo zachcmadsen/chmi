@@ -1,5 +1,5 @@
 ---
-source: tests/it.rs
+source: src/parse.rs
 expression: capabilities
 ---
 Capabilities {

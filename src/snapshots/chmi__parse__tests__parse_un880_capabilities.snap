@@ -1,5 +1,5 @@
 ---
-source: tests/it.rs
+source: src/parse.rs
 expression: capabilities
 ---
 Capabilities {
@@ -33,7 +33,6 @@ Capabilities {
                 code: 20,
                 values: [
                     5,
-                    6,
                     8,
                     11,
                 ],
@@ -60,56 +59,7 @@ Capabilities {
                     17,
                     18,
                     15,
-                ],
-            },
-            VcpCode {
-                code: 98,
-                values: [],
-            },
-            VcpCode {
-                code: 108,
-                values: [],
-            },
-            VcpCode {
-                code: 110,
-                values: [],
-            },
-            VcpCode {
-                code: 112,
-                values: [],
-            },
-            VcpCode {
-                code: 134,
-                values: [
-                    2,
-                    11,
-                ],
-            },
-            VcpCode {
-                code: 135,
-                values: [
                     0,
-                    10,
-                    20,
-                    30,
-                    40,
-                    50,
-                    60,
-                    70,
-                    80,
-                    90,
-                    100,
-                ],
-            },
-            VcpCode {
-                code: 138,
-                values: [],
-            },
-            VcpCode {
-                code: 141,
-                values: [
-                    1,
-                    2,
                 ],
             },
             VcpCode {
@@ -121,7 +71,15 @@ Capabilities {
                 values: [],
             },
             VcpCode {
+                code: 178,
+                values: [],
+            },
+            VcpCode {
                 code: 182,
+                values: [],
+            },
+            VcpCode {
+                code: 192,
                 values: [],
             },
             VcpCode {
@@ -137,49 +95,10 @@ Capabilities {
                 values: [],
             },
             VcpCode {
-                code: 204,
-                values: [
-                    1,
-                    2,
-                    3,
-                    4,
-                    5,
-                    6,
-                    7,
-                    8,
-                    9,
-                    10,
-                    12,
-                    13,
-                    17,
-                    18,
-                    20,
-                    26,
-                    30,
-                    31,
-                    35,
-                    48,
-                    49,
-                ],
-            },
-            VcpCode {
                 code: 214,
                 values: [
                     1,
-                    5,
-                ],
-            },
-            VcpCode {
-                code: 220,
-                values: [
-                    1,
-                    2,
-                    3,
                     4,
-                    5,
-                    6,
-                    7,
-                    8,
                 ],
             },
             VcpCode {
@@ -187,92 +106,135 @@ Capabilities {
                 values: [],
             },
             VcpCode {
-                code: 224,
+                code: 98,
+                values: [],
+            },
+            VcpCode {
+                code: 141,
+                values: [],
+            },
+            VcpCode {
+                code: 244,
+                values: [],
+            },
+            VcpCode {
+                code: 245,
                 values: [
                     0,
                     1,
                     2,
-                    3,
-                    4,
-                    5,
                 ],
             },
             VcpCode {
-                code: 225,
-                values: [
-                    0,
-                    1,
-                ],
-            },
-            VcpCode {
-                code: 227,
+                code: 246,
                 values: [
                     0,
                     1,
                     2,
-                    3,
-                    4,
-                    5,
+                ],
+            },
+            VcpCode {
+                code: 77,
+                values: [],
+            },
+            VcpCode {
+                code: 78,
+                values: [],
+            },
+            VcpCode {
+                code: 79,
+                values: [],
+            },
+            VcpCode {
+                code: 21,
+                values: [
+                    1,
                     6,
+                    17,
+                    19,
+                    20,
+                    21,
+                    24,
+                    25,
+                    40,
+                    41,
+                    72,
                 ],
+            },
+            VcpCode {
+                code: 247,
+                values: [
+                    0,
+                    1,
+                    2,
+                    3,
+                ],
+            },
+            VcpCode {
+                code: 248,
+                values: [
+                    0,
+                    1,
+                ],
+            },
+            VcpCode {
+                code: 249,
+                values: [],
             },
             VcpCode {
                 code: 228,
-                values: [
-                    0,
-                    1,
-                    2,
-                    3,
-                    4,
-                    5,
-                ],
+                values: [],
             },
             VcpCode {
                 code: 229,
-                values: [
-                    0,
-                    1,
-                    2,
-                    3,
-                ],
+                values: [],
             },
             VcpCode {
                 code: 230,
+                values: [],
+            },
+            VcpCode {
+                code: 231,
+                values: [],
+            },
+            VcpCode {
+                code: 232,
+                values: [],
+            },
+            VcpCode {
+                code: 233,
+                values: [],
+            },
+            VcpCode {
+                code: 234,
+                values: [],
+            },
+            VcpCode {
+                code: 235,
+                values: [],
+            },
+            VcpCode {
+                code: 239,
+                values: [],
+            },
+            VcpCode {
+                code: 253,
+                values: [
+                    0,
+                    1,
+                ],
+            },
+            VcpCode {
+                code: 254,
                 values: [
                     0,
                     1,
                     2,
-                    3,
-                    4,
                 ],
             },
             VcpCode {
-                code: 231,
-                values: [
-                    0,
-                    1,
-                ],
-            },
-            VcpCode {
-                code: 233,
-                values: [
-                    0,
-                    1,
-                ],
-            },
-            VcpCode {
-                code: 234,
-                values: [
-                    0,
-                    1,
-                ],
-            },
-            VcpCode {
-                code: 235,
-                values: [
-                    0,
-                    1,
-                ],
+                code: 255,
+                values: [],
             },
         ],
     ),

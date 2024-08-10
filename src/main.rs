@@ -1,3 +1,6 @@
+mod cap;
+mod parse;
+
 use std::{ffi::CString, ptr, slice};
 
 use windows::Win32::{
@@ -111,6 +114,9 @@ fn main() {
     for handle in &physical_monitor_handles {
         if let Some(capabilities_string) = get_capabilities_string(handle) {
             println!("{:?}", capabilities_string);
+            let _capabilities = parse::parse_capabilities_string(
+                capabilities_string.to_str().unwrap(),
+            );
         }
     }
 
