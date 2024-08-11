@@ -1,17 +1,27 @@
 mod cap;
 mod parse;
 
-use std::{ffi::CString, ptr, slice};
+use std::{
+    ffi::{CStr, CString},
+    mem, ptr, slice,
+};
 
 use argh::FromArgs;
-use windows::Win32::{
-    Devices::Display::{
-        CapabilitiesRequestAndCapabilitiesReply, DestroyPhysicalMonitor,
-        GetCapabilitiesStringLength, GetNumberOfPhysicalMonitorsFromHMONITOR,
-        GetPhysicalMonitorsFromHMONITOR,
+use windows::{
+    core::PCSTR,
+    Win32::{
+        Devices::Display::{
+            CapabilitiesRequestAndCapabilitiesReply, DestroyPhysicalMonitor,
+            GetCapabilitiesStringLength,
+            GetNumberOfPhysicalMonitorsFromHMONITOR,
+            GetPhysicalMonitorsFromHMONITOR,
+        },
+        Foundation::{BOOL, HANDLE, LPARAM, RECT, TRUE},
+        Graphics::Gdi::{
+            EnumDisplayDevicesA, EnumDisplayMonitors, DISPLAY_DEVICEA, HDC,
+            HMONITOR,
+        },
     },
-    Foundation::{BOOL, HANDLE, LPARAM, RECT, TRUE},
-    Graphics::Gdi::{EnumDisplayMonitors, HDC, HMONITOR},
 };
 
 unsafe extern "system" fn enum_display_monitors_callback(
@@ -108,6 +118,58 @@ fn get_capabilities_string(handle: &HANDLE) -> Option<CString> {
     }
 }
 
+unsafe fn print_display_devices() {
+    let mut display_device_index = 0;
+
+    let mut display_device = DISPLAY_DEVICEA::default();
+    display_device.cb = mem::size_of::<DISPLAY_DEVICEA>() as u32;
+
+    // CStr::from_ptr(display_device.DeviceName.as_ptr());
+
+    while EnumDisplayDevicesA(
+        None,
+        display_device_index,
+        ptr::addr_of_mut!(display_device),
+        0,
+    )
+    .as_bool()
+    {
+        // Copy the device name since we reuse the display device struct for the next call.
+        let device_name = display_device.DeviceName.clone();
+        println!("device name: {:?}", CStr::from_ptr(device_name.as_ptr()));
+
+        if EnumDisplayDevicesA(
+            PCSTR::from_raw(device_name.as_ptr() as *const u8),
+            0,
+            ptr::addr_of_mut!(display_device),
+            1,
+        )
+        .as_bool()
+        {
+            println!(
+                "device string: {:?}",
+                CStr::from_ptr(display_device.DeviceString.as_ptr())
+            );
+            println!(
+                "device name: {:?}",
+                CStr::from_ptr(display_device.DeviceName.as_ptr())
+            );
+            println!(
+                "device ID: {:?}",
+                CStr::from_ptr(display_device.DeviceID.as_ptr())
+            );
+            println!();
+        }
+
+        display_device_index += 1;
+    }
+}
+
+// Iterate through monitors with EnumDisplayMonitors.
+// For each monitor, get the device name with GetMonitorInfo
+// Use the device name with EnumDisplayDevicesA to get the device ID
+
+// TODO: Add an option to just try the window the terminal is on via MonitorFromWindow.
 #[derive(FromArgs)]
 #[argh(description = "chmi - change monitor input")]
 struct Args {
@@ -126,6 +188,11 @@ fn main() {
         println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
         return;
     }
+
+    unsafe {
+        print_display_devices();
+    }
+    return;
 
     let physical_monitor_handles = get_physical_monitor_handles();
 
