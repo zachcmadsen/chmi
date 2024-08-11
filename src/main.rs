@@ -2,8 +2,10 @@ mod cap;
 mod parse;
 
 use std::{
-    ffi::{CStr, CString},
-    mem, ptr, slice,
+    ffi::{CStr, CString, OsStr, OsString},
+    mem,
+    os::windows::ffi::OsStringExt,
+    ptr, slice,
 };
 
 use argh::FromArgs;
@@ -12,11 +14,14 @@ use windows::{
     Win32::{
         Devices::Display::{
             CapabilitiesRequestAndCapabilitiesReply, DestroyPhysicalMonitor,
-            GetCapabilitiesStringLength,
+            DisplayConfigGetDeviceInfo, GetCapabilitiesStringLength,
+            GetDisplayConfigBufferSizes,
             GetNumberOfPhysicalMonitorsFromHMONITOR,
-            GetPhysicalMonitorsFromHMONITOR,
+            GetPhysicalMonitorsFromHMONITOR, QueryDisplayConfig,
+            DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
+            DISPLAYCONFIG_TARGET_DEVICE_NAME,
         },
-        Foundation::{BOOL, HANDLE, LPARAM, RECT, TRUE},
+        Foundation::{BOOL, ERROR_SUCCESS, HANDLE, LPARAM, RECT, TRUE},
         Graphics::Gdi::{
             EnumDisplayDevicesA, EnumDisplayMonitors, DISPLAY_DEVICEA, HDC,
             HMONITOR,
@@ -118,6 +123,68 @@ fn get_capabilities_string(handle: &HANDLE) -> Option<CString> {
     }
 }
 
+unsafe fn print_monitor_friendly_names() {
+    let mut num_paths = 0;
+    let mut num_modes = 0;
+    GetDisplayConfigBufferSizes(
+        windows::Win32::Devices::Display::QDC_ONLY_ACTIVE_PATHS,
+        ptr::addr_of_mut!(num_paths),
+        ptr::addr_of_mut!(num_modes),
+    )
+    .ok()
+    .expect("GetDisplayConfigBufferSizes failed");
+
+    let mut paths = Vec::with_capacity(num_paths as usize);
+    let mut modes = Vec::with_capacity(num_modes as usize);
+
+    QueryDisplayConfig(
+        windows::Win32::Devices::Display::QDC_ONLY_ACTIVE_PATHS,
+        ptr::addr_of_mut!(num_paths),
+        paths.as_mut_ptr(),
+        ptr::addr_of_mut!(num_modes),
+        modes.as_mut_ptr(),
+        None,
+    )
+    .ok()
+    .expect("QueryDisplayConfig failed");
+
+    paths.set_len(num_paths as usize);
+    modes.set_len(num_modes as usize);
+
+    for path in paths {
+        let mut target = DISPLAYCONFIG_TARGET_DEVICE_NAME::default();
+        target.header.adapterId = path.targetInfo.adapterId;
+        target.header.id = path.targetInfo.id;
+        target.header.r#type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
+        target.header.size = mem::size_of_val(&target) as u32;
+
+        if DisplayConfigGetDeviceInfo(ptr::addr_of_mut!(target.header)) == 0 {
+            let len = target
+                .monitorFriendlyDeviceName
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(0);
+            let friendly_name =
+                OsString::from_wide(&target.monitorFriendlyDeviceName[..len]);
+
+            let len = target
+                .monitorDevicePath
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(0);
+            // The device path is the same as the device ID in DISPLAY_DEVICEA. So, I can associate the friendly name
+            // to the monitors via the device ID
+            let device_path =
+                OsString::from_wide(&target.monitorDevicePath[..len]);
+
+            println!("friendly name: {:?}", friendly_name);
+            println!("device path: {:?}", device_path);
+        } else {
+            println!("DisplayConfigGetDeviceInfo failed");
+        }
+    }
+}
+
 unsafe fn print_display_devices() {
     let mut display_device_index = 0;
 
@@ -191,6 +258,7 @@ fn main() {
 
     unsafe {
         print_display_devices();
+        print_monitor_friendly_names();
     }
     return;
 
