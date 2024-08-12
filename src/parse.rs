@@ -46,12 +46,12 @@ impl<'a> CapabilitiesStringParser<'a> {
     }
 
     fn parse(&mut self) -> anyhow::Result<Capabilities> {
-        let mut capabilites = Capabilities { vcp: None };
+        let mut capabilities = Capabilities { vcp: None };
 
         self.expect(Token::LeftParen)?;
         while !self.check(Token::RightParen) {
             match self.next()? {
-                Token::Vcp => capabilites.vcp = Some(self.parse_vcp()?),
+                Token::Vcp => capabilities.vcp = Some(self.parse_vcp()?),
                 Token::Unknown => {
                     self.expect(Token::LeftParen)?;
                     self.eat_until(Token::RightParen);
@@ -62,7 +62,7 @@ impl<'a> CapabilitiesStringParser<'a> {
         }
         self.expect(Token::RightParen)?;
 
-        Ok(capabilites)
+        Ok(capabilities)
     }
 
     fn parse_vcp(&mut self) -> anyhow::Result<Vec<VcpCode>> {
