@@ -1,4 +1,5 @@
 mod cap;
+mod monitor;
 mod parse;
 
 use std::{
@@ -256,27 +257,35 @@ fn main() {
         return;
     }
 
-    unsafe {
-        print_display_devices();
-        print_monitor_friendly_names();
-    }
-    return;
+    let _monitors = monitor::get_monitors().unwrap();
 
-    let physical_monitor_handles = get_physical_monitor_handles();
+    // unsafe {
+    //     print_display_devices();
+    //     print_monitor_friendly_names();
+    // }
+    // return;
 
-    println!("Capabilities:");
-    for handle in &physical_monitor_handles {
-        if let Some(capabilities_string) = get_capabilities_string(handle) {
-            println!("{:?}", capabilities_string);
-            let _capabilities = parse::parse_capabilities_string(
-                capabilities_string.to_str().unwrap(),
-            );
-        }
-    }
+    // let physical_monitor_handles = get_physical_monitor_handles();
 
-    unsafe {
-        for handle in physical_monitor_handles {
-            DestroyPhysicalMonitor(handle).unwrap();
-        }
-    }
+    // println!("Capabilities:");
+    // for handle in &physical_monitor_handles {
+    //     if let Some(capabilities_string) = get_capabilities_string(handle) {
+    //         println!("{:?}", capabilities_string);
+    //         let _capabilities = parse::parse_capabilities_string(
+    //             capabilities_string.to_str().unwrap(),
+    //         );
+    //     }
+    // }
+
+    // // let monitors = get_monitors();
+    // // check if monitors support change input via their capabilities
+    // // print the ones that support it
+    // // then print the available inputs of the selected monitor
+    // // set the new value for the vcp code
+
+    // unsafe {
+    //     for handle in physical_monitor_handles {
+    //         DestroyPhysicalMonitor(handle).unwrap();
+    //     }
+    // }
 }
