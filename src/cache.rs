@@ -4,63 +4,72 @@ use anyhow::{anyhow, Context};
 use directories::ProjectDirs;
 use rusqlite::Connection;
 
-// TODO: Make a cache struct?
-
 struct CapabilitiesCacheEntry {
     device_id: String,
     capabilities_string: String,
 }
 
-fn get_connection() -> anyhow::Result<Connection> {
-    let project_dirs = ProjectDirs::from("", "", "chmi")
-        .ok_or(anyhow!("failed to compute the cache directory location"))?;
+pub struct CapabilitiesCache {
+    connection: Connection,
+}
 
-    fs::create_dir_all(project_dirs.cache_dir())
-        .context("failed to create the cache directory")?;
+impl CapabilitiesCache {
+    pub fn new() -> anyhow::Result<CapabilitiesCache> {
+        let project_dirs = ProjectDirs::from("", "", "chmi").ok_or(
+            anyhow!("failed to compute the cache directory location"),
+        )?;
 
-    let cache_path = project_dirs.cache_dir().join("capabilities.db");
-    let connection = Connection::open(cache_path)
-        .context("failed to open a connection to the SQLite database")?;
+        fs::create_dir_all(project_dirs.cache_dir())
+            .context("failed to create the cache directory")?;
 
-    connection
-        .execute(
-            "CREATE TABLE IF NOT EXISTS capabilities (
+        let cache_path = project_dirs.cache_dir().join("capabilities.db");
+        let connection = Connection::open(cache_path).context(
+            "failed to open a connection to the capabilities database",
+        )?;
+
+        connection
+            .execute(
+                "CREATE TABLE IF NOT EXISTS capabilities (
                 id                  INTEGER PRIMARY KEY,
                 device_id           TEXT NOT NULL,
                 capabilities_string TEXT NOT NULL
             )",
-            (),
-        )
-        .context("failed to create the capabilities table")?;
+                (),
+            )
+            .context("failed to create the capabilities table")?;
 
-    Ok(connection)
-}
+        Ok(CapabilitiesCache { connection })
+    }
 
-pub fn get(device_id: &str) -> anyhow::Result<Option<String>> {
-    let connection = get_connection()?;
+    pub fn get(&self, device_id: &str) -> anyhow::Result<Option<String>> {
+        let mut statement = self.connection.prepare(
+            "SELECT device_id, capabilities_string FROM capabilities",
+        )?;
 
-    let mut statement = connection
-        .prepare("SELECT device_id, capabilities_string FROM capabilities")?;
+        let entries = statement.query_map((), |row| {
+            Ok(CapabilitiesCacheEntry {
+                device_id: row.get(0)?,
+                capabilities_string: row.get(1)?,
+            })
+        })?;
 
-    let entries = statement.query_map((), |row| {
-        Ok(CapabilitiesCacheEntry {
-            device_id: row.get(0)?,
-            capabilities_string: row.get(1)?,
-        })
-    })?;
+        let entry = entries
+            .filter_map(|entry| entry.ok())
+            .find(|entry| entry.device_id == device_id)
+            .map(|entry| entry.capabilities_string);
 
-    let entry = entries
-        .filter_map(|entry| entry.ok())
-        .find(|entry| entry.device_id == device_id)
-        .map(|entry| entry.capabilities_string);
+        Ok(entry)
+    }
 
-    Ok(entry)
-}
+    pub fn set(
+        &self,
+        device_id: &str,
+        capabilities_string: &str,
+    ) -> anyhow::Result<()> {
+        self.connection.execute(
+            "INSERT INTO capabilities (device_id, capabilities_string) VALUES (?1, ?2)",
+            (device_id, capabilities_string))?;
 
-pub fn set(device_id: &str, capabilities_string: &str) -> anyhow::Result<()> {
-    let connection = get_connection()?;
-    connection.execute(
-        "INSERT INTO capabilities (device_id, capabilities_string) VALUES (?1, ?2)",
-        (device_id, capabilities_string))?;
-    Ok(())
+        Ok(())
+    }
 }

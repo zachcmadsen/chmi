@@ -28,7 +28,7 @@ use windows::{
 };
 
 use crate::{
-    cache,
+    cache::CapabilitiesCache,
     cap::{Capabilities, Input},
     parse,
 };
@@ -85,7 +85,7 @@ fn get_device_name(hmonitor: HMONITOR) -> anyhow::Result<CString> {
     }
 }
 
-fn get_device_id(device_name: &CStr) -> anyhow::Result<CString> {
+fn get_device_id(device_name: &CStr) -> anyhow::Result<String> {
     unsafe {
         let mut display_device = DISPLAY_DEVICEA::default();
         display_device.cb = mem::size_of::<DISPLAY_DEVICEA>() as u32;
@@ -107,7 +107,7 @@ fn get_device_id(device_name: &CStr) -> anyhow::Result<CString> {
         let device_id = CStr::from_bytes_until_nul(device_id_bytes)
             .expect("display device IDs should be null-terminated");
 
-        Ok(device_id.to_owned())
+        Ok(device_id.to_str()?.to_owned())
     }
 }
 
@@ -116,7 +116,7 @@ fn os_string_from_wchar_str(wchar_str: &[u16]) -> OsString {
     OsString::from_wide(&wchar_str[..len])
 }
 
-fn get_friendly_device_name(device_id: &CStr) -> anyhow::Result<String> {
+fn get_friendly_device_name(device_id: &str) -> anyhow::Result<String> {
     unsafe {
         let mut num_paths = 0;
         let mut num_modes = 0;
@@ -167,7 +167,7 @@ fn get_friendly_device_name(device_id: &CStr) -> anyhow::Result<String> {
 
             // The device path of the associated target device is the same as
             // the device ID from DISPLAY_DEVICEA.
-            if device_path.as_encoded_bytes() != device_id.to_bytes() {
+            if device_path.as_encoded_bytes() != device_id.as_bytes() {
                 continue;
             }
 
@@ -179,10 +179,7 @@ fn get_friendly_device_name(device_id: &CStr) -> anyhow::Result<String> {
             return Ok(friendly_device_name);
         }
 
-        Err(anyhow!(
-            "no display path with ID '{}'",
-            device_id.to_string_lossy()
-        ))
+        Err(anyhow!("no display path with ID '{}'", device_id))
     }
 }
 
@@ -228,27 +225,6 @@ fn get_capabilities_string(handle: &HANDLE) -> anyhow::Result<String> {
     }
 }
 
-unsafe extern "system" fn enum_display_monitors_callback(
-    hmonitor: HMONITOR,
-    _: HDC,
-    _: *mut RECT,
-    data: LPARAM,
-) -> BOOL {
-    match Monitor::from_hmonitor(hmonitor) {
-        Ok(monitor) => {
-            let monitors = &mut *(data.0 as *mut Vec<Monitor>);
-            monitors.push(monitor);
-        }
-        Err(err) => {
-            eprintln!("failed to get monitor: {}", err);
-            return TRUE;
-        }
-    };
-
-    // Return TRUE to continue the enumeration.
-    TRUE
-}
-
 pub struct Monitor {
     handle: HANDLE,
     name: String,
@@ -270,16 +246,15 @@ impl Monitor {
         let device_id = get_device_id(&device_name)?;
         let friendly_device_name = get_friendly_device_name(&device_id)?;
 
-        // eprintln!("checking capabilities cache...");
-        let capabilities_string = match cache::get(device_id.to_str()?)? {
+        let cache = CapabilitiesCache::new()?;
+
+        let capabilities_string = match cache.get(&device_id)? {
             Some(capabilities_string) => capabilities_string,
             None => {
-                // eprintln!(
-                //     "capabilities cache miss, fetching capabilities strings"
-                // );
                 let capabilities_string =
                     get_capabilities_string(&physical_monitor)?;
-                cache::set(device_id.to_str()?, &capabilities_string)?;
+
+                cache.set(&device_id, &capabilities_string)?;
                 capabilities_string
             }
         };
@@ -342,6 +317,26 @@ impl Monitor {
 
         Ok(())
     }
+}
+
+unsafe extern "system" fn enum_display_monitors_callback(
+    hmonitor: HMONITOR,
+    _: HDC,
+    _: *mut RECT,
+    data: LPARAM,
+) -> BOOL {
+    match Monitor::from_hmonitor(hmonitor) {
+        Ok(monitor) => {
+            let monitors = &mut *(data.0 as *mut Vec<Monitor>);
+            monitors.push(monitor);
+        }
+        Err(err) => {
+            eprintln!("failed to get monitor: {}", err);
+        }
+    };
+
+    // Return TRUE to continue the enumeration.
+    TRUE
 }
 
 pub fn get_monitors() -> anyhow::Result<Vec<Monitor>> {
