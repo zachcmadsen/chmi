@@ -7,9 +7,10 @@ edition = "2021"
 anyhow = "1.0.86"
 argh = "0.1.12"
 directories = "5.0.1"
-log = { version = "0.4.22", features = ["std"] }
 logos = "0.14.1"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
 windows = { version = "0.58.0", features = ["Win32_Devices_Display", "Win32_Graphics_Gdi"] }
 
 [dev-dependencies]

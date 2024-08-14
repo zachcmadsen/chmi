@@ -1,6 +1,6 @@
 mod cache;
 mod cap;
-mod logger;
+mod fmt;
 mod monitor;
 mod parse;
 
@@ -10,9 +10,9 @@ use std::{
 };
 
 use argh::FromArgs;
-use log::error;
-
-use logger::Logger;
+use fmt::Formatter;
+use tracing::{warn, Level};
+use tracing_subscriber::FmtSubscriber;
 
 // TODO: Add subcommands for "raw" mode
 // TODO: Add an option to just try the window the terminal is on via MonitorFromWindow.
@@ -63,20 +63,39 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    Logger::init(args.verbose).unwrap();
+    if args.verbose {
+        let subscriber = FmtSubscriber::builder()
+            .with_max_level(Level::TRACE)
+            .event_format(Formatter::new())
+            .with_writer(io::stderr)
+            .finish();
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("setting the default global subscriber should succeed");
+    }
 
-    let monitors = match monitor::get_monitors() {
+    let mut monitors = match monitor::get_monitors() {
         Ok(monitors) => monitors,
         Err(_) => {
-            error!("failed to find monitors");
+            // error!("failed to find monitors");
             return ExitCode::FAILURE;
         }
     };
 
-    let monitors: Vec<_> = monitors
-        .into_iter()
-        .filter(|monitor| monitor.capabilities().supports_input_select())
-        .collect();
+    monitors.retain(|monitor| {
+        let has_input_select = monitor.capabilities().supports_input_select();
+        if !has_input_select {
+            warn!(
+                "ignoring monitor '{}' since it doesn't support input select",
+                monitor.name()
+            );
+        }
+        has_input_select
+    });
+
+    if monitors.is_empty() {
+        eprintln!("chmi: unable to find a monitor, try `chmi --verbose` for more information");
+        return ExitCode::SUCCESS;
+    }
 
     let mut monitor_choices = Vec::new();
     for (i, monitor) in monitors.iter().enumerate() {
@@ -90,7 +109,7 @@ fn main() -> ExitCode {
     let curr_input = match monitor.input() {
         Ok(input) => input,
         Err(_) => {
-            error!("failed to detect the current input");
+            // error!("failed to detect the current input");
             return ExitCode::FAILURE;
         }
     };
@@ -112,7 +131,7 @@ fn main() -> ExitCode {
     let input = &inputs[input_choice - 1];
 
     if let Err(_) = monitor.set_input(input) {
-        error!("failed to change input");
+        // error!("failed to change input");
         return ExitCode::FAILURE;
     }
 
