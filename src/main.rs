@@ -94,6 +94,8 @@ fn main() -> ExitCode {
 
     if monitors.is_empty() {
         eprintln!("chmi: unable to find a monitor, try `chmi --verbose` for more information");
+        // I count this as a success because the program didn't fail. It's
+        // likely a problem with the user's setup.
         return ExitCode::SUCCESS;
     }
 
