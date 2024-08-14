@@ -1,5 +1,7 @@
 use std::fmt;
 
+const INPUT_SELECT_CODE: u8 = 0x60;
+
 #[derive(Debug, PartialEq)]
 pub struct VcpCode {
     pub code: u8,
@@ -31,31 +33,29 @@ impl fmt::Display for Input {
 }
 
 impl Capabilities {
-    pub fn supports_input_select(&self) -> bool {
+    pub fn has_input_select(&self) -> bool {
         self.vcp.as_ref().is_some_and(|vcp_codes| {
-            vcp_codes.iter().any(|vcp_code| vcp_code.code == 0x60)
+            vcp_codes.iter().any(|vcp_code| vcp_code.code == INPUT_SELECT_CODE)
         })
     }
 
-    pub fn supported_inputs(&self) -> Vec<Input> {
+    pub fn inputs(&self) -> Option<Vec<Input>> {
         let mut inputs = Vec::new();
 
-        if let Some(vcp_codes) = self.vcp.as_ref() {
-            if let Some(vcp_code) =
-                vcp_codes.iter().find(|vcp_code| vcp_code.code == 0x60)
-            {
-                for &value in vcp_code.values.iter() {
-                    match value {
-                        0x0F => inputs.push(Input::DisplayPort1),
-                        0x10 => inputs.push(Input::DisplayPort2),
-                        0x11 => inputs.push(Input::Hdmi1),
-                        0x12 => inputs.push(Input::Hdmi2),
-                        _ => (),
-                    }
-                }
+        let vcp_codes = self.vcp.as_ref()?;
+        let vcp_code = vcp_codes
+            .iter()
+            .find(|vcp_code| vcp_code.code == INPUT_SELECT_CODE)?;
+        for value in &vcp_code.values {
+            match value {
+                0x0F => inputs.push(Input::DisplayPort1),
+                0x10 => inputs.push(Input::DisplayPort2),
+                0x11 => inputs.push(Input::Hdmi1),
+                0x12 => inputs.push(Input::Hdmi2),
+                _ => (),
             }
         }
 
-        inputs
+        Some(inputs)
     }
 }

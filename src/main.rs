@@ -82,7 +82,7 @@ fn main() -> ExitCode {
     };
 
     monitors.retain(|monitor| {
-        let has_input_select = monitor.capabilities().supports_input_select();
+        let has_input_select = monitor.capabilities().has_input_select();
         if !has_input_select {
             warn!(
                 "ignoring monitor '{}' since it doesn't support input select",
@@ -114,7 +114,7 @@ fn main() -> ExitCode {
         }
     };
 
-    let inputs = monitor.capabilities().supported_inputs();
+    let inputs = monitor.capabilities().inputs().unwrap();
 
     let mut input_choices = Vec::new();
     for (i, input) in inputs.iter().enumerate() {
