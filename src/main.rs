@@ -1,18 +1,11 @@
-mod cache;
-mod cap;
-mod fmt;
-mod monitor;
-mod parse;
-
 use std::{
     io::{self, Write},
     process::ExitCode,
 };
 
 use argh::FromArgs;
-use fmt::Formatter;
-use tracing::{warn, Level};
-use tracing_subscriber::FmtSubscriber;
+use tracing::{error, info, warn, Level};
+use tracing_subscriber::{fmt, FmtSubscriber};
 
 // TODO: Add subcommands for "raw" mode
 // TODO: Add an option to just try the window the terminal is on via MonitorFromWindow.
@@ -64,19 +57,24 @@ fn main() -> ExitCode {
     }
 
     if args.verbose {
+        let format = fmt::format()
+            .compact()
+            .with_ansi(false)
+            .with_target(false)
+            .without_time();
         let subscriber = FmtSubscriber::builder()
             .with_max_level(Level::TRACE)
-            .event_format(Formatter::new())
             .with_writer(io::stderr)
+            .event_format(format)
             .finish();
         tracing::subscriber::set_global_default(subscriber)
             .expect("setting the default global subscriber should succeed");
     }
 
-    let mut monitors = match monitor::get_monitors() {
+    let mut monitors = match chmi::get_monitors() {
         Ok(monitors) => monitors,
-        Err(_) => {
-            // error!("failed to find monitors");
+        Err(err) => {
+            error!("{}", err);
             return ExitCode::FAILURE;
         }
     };
@@ -93,7 +91,7 @@ fn main() -> ExitCode {
     });
 
     if monitors.is_empty() {
-        eprintln!("chmi: unable to find a monitor, try `chmi --verbose` for more information");
+        info!("unable to find a monitor, try `chmi --verbose` for more information");
         // I count this as a success because the program didn't fail. It's
         // likely a problem with the user's setup.
         return ExitCode::SUCCESS;
@@ -110,8 +108,8 @@ fn main() -> ExitCode {
 
     let curr_input = match monitor.input() {
         Ok(input) => input,
-        Err(_) => {
-            // error!("failed to detect the current input");
+        Err(err) => {
+            error!("{}", err);
             return ExitCode::FAILURE;
         }
     };
@@ -132,8 +130,8 @@ fn main() -> ExitCode {
     let input_choice = get_choice("Input", &input_choices);
     let input = &inputs[input_choice - 1];
 
-    if let Err(_) = monitor.set_input(input) {
-        // error!("failed to change input");
+    if let Err(err) = monitor.set_input(input) {
+        error!("{}", err);
         return ExitCode::FAILURE;
     }
 
