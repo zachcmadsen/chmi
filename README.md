@@ -1,6 +1,6 @@
 # chmi
 
-`chmi` is a command line tool for changing monitor inputs on Windows.
+`chmi` is a command-line tool for changing monitor inputs on Windows.
 
 ## Usage
 
@@ -27,3 +27,7 @@ tired of reaching around my monitor to switch its input. `chmi` uses the Win32
 Monitor Configuration API to change monitor inputs programatically. I'm sure
 there are existing tools to do the same thing, but it seemed more fun to write
 my own.
+
+## Resources
+
+- Monitor Configuration API: https://learn.microsoft.com/en-us/windows/win32/api/_monitor/
