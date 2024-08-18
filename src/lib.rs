@@ -8,11 +8,11 @@ use monitor::Monitor;
 
 pub fn get_monitors() -> anyhow::Result<Vec<Box<dyn Monitor>>> {
     let monitors = windows::get_monitors()?;
-    let mut new_monitors: Vec<Box<dyn Monitor>> = Vec::new();
 
+    let mut boxed_monitors: Vec<Box<dyn Monitor>> = Vec::new();
     for monitor in monitors {
-        new_monitors.push(Box::new(monitor));
+        boxed_monitors.push(Box::new(monitor));
     }
 
-    Ok(new_monitors)
+    Ok(boxed_monitors)
 }
