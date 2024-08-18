@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     ffi::{CStr, CString, OsString},
     mem,
     os::windows::ffi::OsStringExt,
@@ -34,9 +35,12 @@ use crate::{
     parse,
 };
 
-fn os_string_from_wstr(wstr: &[u16]) -> OsString {
-    let len = wstr.iter().position(|&c| c == 0).unwrap_or(0);
-    OsString::from_wide(&wstr[..len])
+fn string_from_wide(wide: &[u16]) -> String {
+    let len = wide.iter().position(|&c| c == 0).unwrap_or(0);
+    OsString::from_wide(&wide[..len])
+        .to_str()
+        .expect("WCHAR strings from the OS should be valid Unicode")
+        .to_string()
 }
 
 /// Returns the physical monitor associated with an HMONITOR handle.
@@ -131,10 +135,8 @@ fn get_device_id(device_name: &CStr) -> anyhow::Result<String> {
     }
 }
 
-// TODO: We can call this function once and reuse the result for all
-// HMONITORs.
-/// Returns the "friendly" name for a display monitor.
-fn get_friendly_name(device_id: &str) -> anyhow::Result<String> {
+/// Returns a map of device IDs to friendly names for all display devices.
+fn get_friendly_name_map() -> anyhow::Result<HashMap<String, String>> {
     unsafe {
         let mut num_paths = 0;
         let mut num_modes = 0;
@@ -165,6 +167,8 @@ fn get_friendly_name(device_id: &str) -> anyhow::Result<String> {
         paths.set_len(num_paths as usize);
         modes.set_len(num_modes as usize);
 
+        let mut map = HashMap::new();
+
         for path in paths {
             let mut target = DISPLAYCONFIG_TARGET_DEVICE_NAME::default();
             target.header.adapterId = path.targetInfo.adapterId;
@@ -177,28 +181,18 @@ fn get_friendly_name(device_id: &str) -> anyhow::Result<String> {
             if DisplayConfigGetDeviceInfo(ptr::addr_of_mut!(target.header))
                 != 0
             {
-                bail!("failed to get display device configuration information for device '{}'", device_id);
+                bail!("failed to get display device configuration information for device");
             }
 
-            let device_path = os_string_from_wstr(&target.monitorDevicePath);
-            // The device path of the associated target device is the same as
-            // the device ID from DISPLAY_DEVICEA.
-            if device_path.as_encoded_bytes() != device_id.as_bytes() {
-                continue;
-            }
+            let device_path = string_from_wide(&target.monitorDevicePath);
 
             let friendly_name =
-                os_string_from_wstr(&target.monitorFriendlyDeviceName)
-                    .to_str()
-                    .expect(
-                        "display device friendly names should be valid UTF-8",
-                    )
-                    .to_string();
+                string_from_wide(&target.monitorFriendlyDeviceName);
 
-            return Ok(friendly_name);
+            map.insert(device_path, friendly_name);
         }
 
-        Err(anyhow!("display device with ID '{}' not found", device_id))
+        Ok(map)
     }
 }
 
@@ -265,13 +259,16 @@ pub struct Monitor {
 }
 
 impl Monitor {
-    fn new(hmonitor: HMONITOR) -> anyhow::Result<Monitor> {
+    fn new(
+        hmonitor: HMONITOR,
+        friendly_name_map: &HashMap<String, String>,
+    ) -> anyhow::Result<Monitor> {
         let physical_monitor = get_physical_monitor(hmonitor)?;
 
         let device_name = get_device_name(hmonitor)?;
         let device_id = get_device_id(&device_name)?;
 
-        let friendly_name = get_friendly_name(&device_id)?;
+        let friendly_name = friendly_name_map.get(&device_id).unwrap();
 
         let capabilities_string =
             get_capabilities_string(&physical_monitor, &device_id)?;
@@ -281,7 +278,7 @@ impl Monitor {
 
         Ok(Monitor {
             handle: physical_monitor,
-            name: friendly_name,
+            name: friendly_name.clone(),
             capabilities,
         })
     }
@@ -369,10 +366,12 @@ unsafe extern "system" fn enum_display_monitors_callback(
     _: *mut RECT,
     data: LPARAM,
 ) -> BOOL {
-    match Monitor::new(hmonitor) {
+    let context = &mut *(data.0 as *mut EnumDisplayMonitorContext);
+
+    match Monitor::new(hmonitor, &context.friendly_name_map) {
         Ok(monitor) => {
-            let monitors = &mut *(data.0 as *mut Vec<Monitor>);
-            monitors.push(monitor);
+            // let monitors = &mut *(data.0 as *mut Vec<Monitor>);
+            context.monitors.push(monitor);
         }
         Err(err) => {
             error!("an error occurred while getting display monitor information: {}", err);
@@ -384,8 +383,18 @@ unsafe extern "system" fn enum_display_monitors_callback(
     TRUE
 }
 
+struct EnumDisplayMonitorContext {
+    monitors: Vec<Monitor>,
+    friendly_name_map: HashMap<String, String>,
+}
+
 pub fn get_monitors() -> anyhow::Result<Vec<Monitor>> {
-    let mut monitors = Vec::new();
+    let map = get_friendly_name_map().unwrap();
+
+    let mut context = EnumDisplayMonitorContext {
+        monitors: Vec::new(),
+        friendly_name_map: map,
+    };
 
     unsafe {
         // Pass None, i.e., NULL, for the first two parameters to enumerate
@@ -394,11 +403,11 @@ pub fn get_monitors() -> anyhow::Result<Vec<Monitor>> {
             None,
             None,
             Some(enum_display_monitors_callback),
-            LPARAM(ptr::addr_of_mut!(monitors) as _),
+            LPARAM(ptr::addr_of_mut!(context) as _),
         )
         .ok()
         .context("failed to enumerate display monitors")?;
     }
 
-    Ok(monitors)
+    Ok(context.monitors)
 }
