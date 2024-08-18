@@ -93,10 +93,7 @@ impl<'a> CapabilitiesStringParser<'a> {
         match self.next()? {
             Token::HexNumber(n) => Ok(n),
             token => {
-                return Err(anyhow!(
-                    "expected hexadecimal number, found {}",
-                    token
-                ))
+                Err(anyhow!("expected hexadecimal number, found {}", token))
             }
         }
     }
@@ -139,7 +136,7 @@ impl<'a> CapabilitiesStringParser<'a> {
             .get(self.index)
             .map(|t| {
                 self.index += 1;
-                t.clone()
+                *t
             })
             .ok_or(anyhow!("unexpected end-of-file"))
     }

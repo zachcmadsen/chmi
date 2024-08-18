@@ -128,8 +128,10 @@ fn get_device_id(hmonitor: HMONITOR) -> anyhow::Result<String> {
         let device_name = CStr::from_bytes_until_nul(device_name_bytes)
             .expect("display monitor device names should be null-terminated");
 
-        let mut display_device = DISPLAY_DEVICEA::default();
-        display_device.cb = mem::size_of::<DISPLAY_DEVICEA>() as u32;
+        let mut display_device = DISPLAY_DEVICEA {
+            cb: mem::size_of::<DISPLAY_DEVICEA>() as u32,
+            ..DISPLAY_DEVICEA::default()
+        };
 
         EnumDisplayDevicesA(
             PCSTR::from_raw(device_name.as_ptr() as *const u8),
@@ -242,7 +244,7 @@ fn get_capabilities_string(
                 .to_owned();
 
         if let Ok(ref cache) = cache {
-            let _ = cache.set(&device_id, &capabilities_string);
+            let _ = cache.set(device_id, &capabilities_string);
         }
 
         Ok(capabilities_string)
