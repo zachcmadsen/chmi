@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    ffi::{CStr, CString, OsString},
+    ffi::{CStr, OsString},
     mem,
     os::windows::ffi::OsStringExt,
     ptr, slice,
@@ -41,92 +41,6 @@ fn string_from_wide(wide: &[u16]) -> String {
         .to_str()
         .expect("WCHAR strings from the OS should be valid Unicode")
         .to_string()
-}
-
-/// Returns the physical monitor associated with an HMONITOR handle.
-///
-/// # Errors
-/// Returns `Err` if there are zero or multiple physical monitors associated
-/// with a handle.
-fn get_physical_monitor(hmonitor: HMONITOR) -> anyhow::Result<HANDLE> {
-    unsafe {
-        let mut num_physical_monitors: u32 = 0;
-        GetNumberOfPhysicalMonitorsFromHMONITOR(
-            hmonitor,
-            ptr::addr_of_mut!(num_physical_monitors),
-        )
-        .context("failed to get the number of physical monitors for a display monitor")?;
-
-        if num_physical_monitors == 0 {
-            bail!("the display monitor has no associated physical monitor");
-        } else if num_physical_monitors > 1 {
-            // I don't know what it means for a display to have multiple
-            // physical monitors. For example, which one would set I VCP codes
-            // on? This is probably a valid scenario, but it's easier to leave
-            // it unhandled for now.
-            bail!(
-                "the display monitor has more than one associated physical monitor"
-            );
-        }
-
-        let mut physical_monitor = PHYSICAL_MONITOR::default();
-        GetPhysicalMonitorsFromHMONITOR(
-            hmonitor,
-            slice::from_raw_parts_mut(ptr::addr_of_mut!(physical_monitor), 1),
-        )
-        .context("failed to get the physical monitor for a display monitor")?;
-
-        Ok(physical_monitor.hPhysicalMonitor)
-    }
-}
-
-/// Returns the device ID of the display monitor associated with an HMONITOR
-/// handle.
-fn get_device_id(hmonitor: HMONITOR) -> anyhow::Result<String> {
-    unsafe {
-        let mut monitor_info = MONITORINFOEXA::default();
-        monitor_info.monitorInfo.cbSize =
-            mem::size_of_val(&monitor_info) as u32;
-        GetMonitorInfoA(hmonitor, ptr::addr_of_mut!(monitor_info) as _)
-            .ok()
-            .context("failed to get a display monitor device name")?;
-
-        let device_name_bytes = slice::from_raw_parts(
-            monitor_info.szDevice.as_ptr() as _,
-            monitor_info.szDevice.len(),
-        );
-        // The documentation for MONITORINFOEXA doesn't say that the string in
-        // szDevice is null-terminated. Because the MONITORINFOEXA struct is
-        // zeroed, it's effectively null-terminated when the name is less than
-        // 32 characters (the size of szDevice).
-        let device_name = CStr::from_bytes_until_nul(device_name_bytes)
-            .expect("display monitor device names should be null-terminated");
-
-        let mut display_device = DISPLAY_DEVICEA::default();
-        display_device.cb = mem::size_of::<DISPLAY_DEVICEA>() as u32;
-
-        EnumDisplayDevicesA(
-            PCSTR::from_raw(device_name.as_ptr() as *const u8),
-            0,
-            ptr::addr_of_mut!(display_device),
-            1,
-        )
-        .ok()
-        .context("failed to get the display monitor device ID")?;
-
-        let device_id_bytes = slice::from_raw_parts(
-            display_device.DeviceID.as_ptr() as _,
-            display_device.DeviceID.len(),
-        );
-        // See the comment about null-terminated strings in `get_device_name`.
-        let device_id = CStr::from_bytes_until_nul(device_id_bytes)
-            .expect("display device IDs should be null-terminated");
-
-        Ok(device_id
-            .to_str()
-            .expect("display device IDs should be valid UTF-8")
-            .to_owned())
-    }
 }
 
 /// Returns a map of device IDs to friendly names for all display devices.
@@ -175,18 +89,106 @@ fn get_friendly_name_map() -> anyhow::Result<HashMap<String, String>> {
             if DisplayConfigGetDeviceInfo(ptr::addr_of_mut!(target.header))
                 != 0
             {
-                bail!("failed to get display device configuration information for device");
+                bail!(
+                    "failed to get display device configuration information"
+                );
             }
 
-            let device_path = string_from_wide(&target.monitorDevicePath);
-
+            let device_id = string_from_wide(&target.monitorDevicePath);
             let friendly_name =
                 string_from_wide(&target.monitorFriendlyDeviceName);
 
-            map.insert(device_path, friendly_name);
+            map.insert(device_id, friendly_name);
         }
 
         Ok(map)
+    }
+}
+
+/// Returns the device ID of the display monitor associated with an HMONITOR
+/// handle.
+fn get_device_id(hmonitor: HMONITOR) -> anyhow::Result<String> {
+    unsafe {
+        let mut monitor_info = MONITORINFOEXA::default();
+        monitor_info.monitorInfo.cbSize =
+            mem::size_of_val(&monitor_info) as u32;
+        GetMonitorInfoA(hmonitor, ptr::addr_of_mut!(monitor_info) as _)
+            .ok()
+            .context("failed to get the device name for a display monitor")?;
+
+        let device_name_bytes = slice::from_raw_parts(
+            monitor_info.szDevice.as_ptr() as _,
+            monitor_info.szDevice.len(),
+        );
+        // The documentation for MONITORINFOEXA doesn't say that the string in
+        // szDevice is null-terminated. Because the MONITORINFOEXA struct is
+        // zeroed, it's effectively null-terminated when the name is less than
+        // 32 characters (the size of szDevice). Hopefully device names are
+        // always less than 32 characters...
+        let device_name = CStr::from_bytes_until_nul(device_name_bytes)
+            .expect("display monitor device names should be null-terminated");
+
+        let mut display_device = DISPLAY_DEVICEA::default();
+        display_device.cb = mem::size_of::<DISPLAY_DEVICEA>() as u32;
+
+        EnumDisplayDevicesA(
+            PCSTR::from_raw(device_name.as_ptr() as *const u8),
+            0,
+            ptr::addr_of_mut!(display_device),
+            1,
+        )
+        .ok()
+        .context("failed to get the device ID for a display monitor")?;
+
+        let device_id_bytes = slice::from_raw_parts(
+            display_device.DeviceID.as_ptr() as _,
+            display_device.DeviceID.len(),
+        );
+        // See the comment above about null-terminated strings for szDevice.
+        let device_id = CStr::from_bytes_until_nul(device_id_bytes)
+            .expect("display device IDs should be null-terminated");
+
+        Ok(device_id
+            .to_str()
+            .expect("display device IDs should be valid UTF-8")
+            .to_owned())
+    }
+}
+
+/// Returns the physical monitor associated with an HMONITOR handle.
+///
+/// # Errors
+/// Returns `Err` if there are zero or multiple physical monitors associated
+/// with a handle.
+fn get_physical_monitor(hmonitor: HMONITOR) -> anyhow::Result<HANDLE> {
+    unsafe {
+        let mut num_physical_monitors: u32 = 0;
+        GetNumberOfPhysicalMonitorsFromHMONITOR(
+            hmonitor,
+            ptr::addr_of_mut!(num_physical_monitors),
+        )
+        .context("failed to get the number of physical monitors for a display monitor")?;
+
+        if num_physical_monitors == 0 {
+            bail!("display monitor has no associated physical monitor");
+        } else if num_physical_monitors > 1 {
+            // I don't know what it means for a display to have multiple
+            // physical monitors. For example, which one would set I VCP codes
+            // on? This is probably a valid scenario, but it's easier to leave
+            // it unhandled for now.
+            bail!(
+                "display monitor has more than one associated physical monitor"
+            );
+        }
+
+        let mut physical_monitor = PHYSICAL_MONITOR::default();
+        GetPhysicalMonitorsFromHMONITOR(
+            hmonitor,
+            slice::from_raw_parts_mut(ptr::addr_of_mut!(physical_monitor), 1),
+        )
+        .context("failed to get the physical monitor for a display monitor")?;
+
+        Ok(physical_monitor.hPhysicalMonitor)
     }
 }
 
@@ -208,13 +210,13 @@ fn get_capabilities_string(
             ptr::addr_of_mut!(capabilities_string_len),
         ) == FALSE.0
         {
-            return Err(anyhow!("failed to get a capabilities string length"));
+            bail!("failed to get capabilities string length");
         }
 
         // TODO: Add retries for capabilities functions failures. I've seen
         // transient failures on my machine.
         if capabilities_string_len == 0 {
-            return Err(anyhow!("received an empty capabilities string"));
+            bail!("received an empty capabilities string");
         }
 
         let mut capabilities_string_bytes =
@@ -227,8 +229,9 @@ fn get_capabilities_string(
             ),
         ) == FALSE.0
         {
-            return Err(anyhow!("failed to get a capabilities string"));
+            bail!("failed to get capabilities string");
         }
+
         capabilities_string_bytes.set_len(capabilities_string_len as usize);
 
         let capabilities_string =
