@@ -67,7 +67,7 @@ fn main() -> ExitCode {
             .expect("setting the default global subscriber should succeed");
     }
 
-    let mut monitors = match chmi::get_monitors() {
+    let mut monitors = match chmi::get_monitors2() {
         Ok(monitors) => monitors,
         Err(err) => {
             error!("{}", err);
@@ -100,7 +100,7 @@ fn main() -> ExitCode {
     }
 
     let monitor_choice = get_choice("Monitor", &monitor_choices);
-    let monitor = &monitors[monitor_choice - 1];
+    let monitor = &mut monitors[monitor_choice - 1];
 
     let curr_input = match monitor.input() {
         Ok(input) => input,
@@ -126,7 +126,7 @@ fn main() -> ExitCode {
     let input_choice = get_choice("Input", &input_choices);
     let input = &inputs[input_choice - 1];
 
-    if let Err(err) = monitor.set_input(input) {
+    if let Err(err) = monitor.set_input(*input) {
         error!("{}", err);
         return ExitCode::FAILURE;
     }

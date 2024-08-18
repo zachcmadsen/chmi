@@ -31,7 +31,7 @@ use windows::{
 use crate::{
     cache::CapabilitiesCache,
     cap::{Capabilities, Input, INPUT_SELECT_CODE},
-    parse,
+    parse, Monitor2,
 };
 
 fn os_string_from_wstr(wstr: &[u16]) -> OsString {
@@ -317,8 +317,24 @@ impl Monitor {
             .expect("the value of a VCP code should be valid"))
     }
 
-    pub fn set_input(&self, input: &Input) -> anyhow::Result<()> {
-        let value: u8 = (*input).into();
+    // pub fn set_input(&self, input: &Input) -> anyhow::Result<()> {}
+}
+
+impl Monitor2 for Monitor {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn capabilities(&self) -> &Capabilities {
+        &self.capabilities
+    }
+
+    fn input(&self) -> anyhow::Result<Input> {
+        self.input()
+    }
+
+    fn set_input(&mut self, input: Input) -> anyhow::Result<()> {
+        let value: u8 = input.into();
         unsafe {
             // TODO: Use GetLastError to get more error information. Same
             // thing for GetVCPFeatureAndVCPFeatureReply. See BOOL::ok for
