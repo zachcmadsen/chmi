@@ -6,7 +6,7 @@ use std::{
     ptr, slice,
 };
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::{bail, Context};
 use tracing::error;
 use windows::{
     core::PCSTR,
@@ -32,7 +32,7 @@ use windows::{
 use crate::{
     cache::CapabilitiesCache,
     cap::{Capabilities, Input, INPUT_SELECT_CODE},
-    parse,
+    monitor, parse,
 };
 
 fn string_from_wide(wide: &[u16]) -> String {
@@ -193,8 +193,8 @@ fn get_physical_monitor(hmonitor: HMONITOR) -> anyhow::Result<HANDLE> {
 }
 
 fn get_capabilities_string(
-    handle: &HANDLE,
     device_id: &str,
+    handle: &HANDLE,
 ) -> anyhow::Result<String> {
     unsafe {
         let cache = CapabilitiesCache::new();
@@ -260,17 +260,14 @@ impl Monitor {
         hmonitor: HMONITOR,
         friendly_name_map: &HashMap<String, String>,
     ) -> anyhow::Result<Monitor> {
-        let physical_monitor = get_physical_monitor(hmonitor)?;
-
         let device_id = get_device_id(hmonitor)?;
-
         let friendly_name = friendly_name_map.get(&device_id).unwrap();
 
-        let capabilities_string =
-            get_capabilities_string(&physical_monitor, &device_id)?;
+        let physical_monitor = get_physical_monitor(hmonitor)?;
 
-        let capabilities =
-            parse::parse_capabilities_string(&capabilities_string)?;
+        let capabilities_string =
+            get_capabilities_string(&device_id, &physical_monitor)?;
+        let capabilities = parse::parse(&capabilities_string)?;
 
         Ok(Monitor {
             handle: physical_monitor,
@@ -280,7 +277,7 @@ impl Monitor {
     }
 }
 
-impl crate::monitor::Monitor for Monitor {
+impl monitor::Monitor for Monitor {
     fn name(&self) -> &str {
         &self.name
     }
@@ -342,40 +339,36 @@ impl Drop for Monitor {
     }
 }
 
-unsafe extern "system" fn enum_display_monitors_callback(
-    hmonitor: HMONITOR,
-    _: HDC,
-    _: *mut RECT,
-    data: LPARAM,
-) -> BOOL {
-    let context = &mut *(data.0 as *mut EnumDisplayMonitorContext);
-
-    match Monitor::new(hmonitor, &context.friendly_name_map) {
-        Ok(monitor) => {
-            // let monitors = &mut *(data.0 as *mut Vec<Monitor>);
-            context.monitors.push(monitor);
-        }
-        Err(err) => {
-            error!("an error occurred while getting display monitor information: {}", err);
-            error!("{}", err.root_cause());
-        }
-    };
-
-    // Return TRUE to continue the enumeration.
-    TRUE
-}
-
-struct EnumDisplayMonitorContext {
-    monitors: Vec<Monitor>,
-    friendly_name_map: HashMap<String, String>,
-}
-
 pub fn get_monitors() -> anyhow::Result<Vec<Monitor>> {
-    let map = get_friendly_name_map().unwrap();
+    struct EnumDisplayMonitorContext {
+        monitors: Vec<Monitor>,
+        friendly_name_map: HashMap<String, String>,
+    }
+
+    unsafe extern "system" fn enum_display_monitors_callback(
+        hmonitor: HMONITOR,
+        _: HDC,
+        _: *mut RECT,
+        data: LPARAM,
+    ) -> BOOL {
+        let context = &mut *(data.0 as *mut EnumDisplayMonitorContext);
+
+        match Monitor::new(hmonitor, &context.friendly_name_map) {
+            Ok(monitor) => {
+                context.monitors.push(monitor);
+            }
+            Err(err) => {
+                error!("{}: {}", err, err.source().unwrap());
+            }
+        };
+
+        // Return TRUE to continue the enumeration.
+        TRUE
+    }
 
     let mut context = EnumDisplayMonitorContext {
         monitors: Vec::new(),
-        friendly_name_map: map,
+        friendly_name_map: get_friendly_name_map()?,
     };
 
     unsafe {
