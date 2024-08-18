@@ -4,18 +4,18 @@
 
 ## Usage
 
-`chmi` is interactive. It prompts you for a monitor and an input. Here's a sample output:
+`chmi` is interactive. It prompts you for a monitor and an input. Here's an example run:
 
-```bash
+```
 $ chmi
-1) LG HDR 4K
-2) U32J59x
-3) VG259
-Monitor (1/2/3): 3
-1) HDMI 1
-2) HDMI 2
-3) DisplayPort 1 (*)
-Input (1/2/3): 1
+  1 LG HDR 4K
+  2 U32J59x
+  3 VG259
+==> Monitor (1/2/3): 3
+  1 HDMI 1 (*)
+  2 HDMI 2
+  3 DisplayPort 1
+==> Input (1/2/3): 3
 ```
 
 See `chmi --help` for available options.
