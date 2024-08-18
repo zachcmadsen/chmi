@@ -57,11 +57,7 @@ fn main() -> ExitCode {
     }
 
     if args.verbose {
-        let format = fmt::format()
-            .compact()
-            .with_ansi(false)
-            .with_target(false)
-            .without_time();
+        let format = fmt::format().with_target(false).without_time();
         let subscriber = FmtSubscriber::builder()
             .with_max_level(Level::TRACE)
             .with_writer(io::stderr)
