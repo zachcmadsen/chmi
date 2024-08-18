@@ -144,6 +144,10 @@ fn main() -> ExitCode {
     let input_choice = get_choice("Input", &input_choices);
     let input = &inputs[input_choice - 1];
 
+    if input == &curr_input {
+        return ExitCode::SUCCESS;
+    }
+
     if let Err(err) = monitor.set_input(*input) {
         error!("{}", err);
         return ExitCode::FAILURE;
