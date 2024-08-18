@@ -4,6 +4,7 @@ use std::{
 };
 
 use argh::FromArgs;
+use owo_colors::{OwoColorize, Stream::Stdout};
 use tracing::{error, info, warn, Level};
 use tracing_subscriber::{fmt, FmtSubscriber};
 
@@ -28,7 +29,12 @@ fn get_choice(prompt: &str, choices: &[usize]) -> usize {
 
     let choice: usize;
     loop {
-        print!("{} ({}): ", prompt, choices_string);
+        print!(
+            "{} {} ({}): ",
+            "==>".if_supports_color(Stdout, |text| text.bright_yellow()),
+            prompt,
+            choices_string
+        );
         let _ = io::stdout().flush();
 
         let mut input = String::new();
@@ -96,7 +102,11 @@ fn main() -> ExitCode {
     let mut monitor_choices = Vec::new();
     for (i, monitor) in monitors.iter().enumerate() {
         monitor_choices.push(i + 1);
-        println!("{}) {}", i + 1, monitor.name());
+        println!(
+            "  {} {}",
+            (i + 1).if_supports_color(Stdout, |text| text.bright_cyan()),
+            monitor.name()
+        );
     }
 
     let monitor_choice = get_choice("Monitor", &monitor_choices);
@@ -117,9 +127,17 @@ fn main() -> ExitCode {
         input_choices.push(i + 1);
 
         if input == &curr_input {
-            println!("{}) {} (*)", i + 1, input);
+            println!(
+                "  {} {} (*)",
+                (i + 1).if_supports_color(Stdout, |text| text.bright_cyan()),
+                input
+            );
         } else {
-            println!("{}) {}", i + 1, input);
+            println!(
+                "  {} {}",
+                (i + 1).if_supports_color(Stdout, |text| text.bright_cyan()),
+                input
+            );
         }
     }
 
