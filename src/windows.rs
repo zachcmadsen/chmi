@@ -47,7 +47,7 @@ fn string_from_wide(wide: &[u16]) -> String {
 ///
 /// # Errors
 /// Returns `Err` if there are zero or multiple physical monitors associated
-/// with the handle.
+/// with a handle.
 fn get_physical_monitor(hmonitor: HMONITOR) -> anyhow::Result<HANDLE> {
     unsafe {
         let mut num_physical_monitors: u32 = 0;
@@ -80,8 +80,9 @@ fn get_physical_monitor(hmonitor: HMONITOR) -> anyhow::Result<HANDLE> {
     }
 }
 
-/// Returns the device name for a display monitor.
-fn get_device_name(hmonitor: HMONITOR) -> anyhow::Result<CString> {
+/// Returns the device ID of the display monitor associated with an HMONITOR
+/// handle.
+fn get_device_id(hmonitor: HMONITOR) -> anyhow::Result<String> {
     unsafe {
         let mut monitor_info = MONITORINFOEXA::default();
         monitor_info.monitorInfo.cbSize =
@@ -101,13 +102,6 @@ fn get_device_name(hmonitor: HMONITOR) -> anyhow::Result<CString> {
         let device_name = CStr::from_bytes_until_nul(device_name_bytes)
             .expect("display monitor device names should be null-terminated");
 
-        Ok(device_name.to_owned())
-    }
-}
-
-/// Returns the device ID for device `device_name`.
-fn get_device_id(device_name: &CStr) -> anyhow::Result<String> {
-    unsafe {
         let mut display_device = DISPLAY_DEVICEA::default();
         display_device.cb = mem::size_of::<DISPLAY_DEVICEA>() as u32;
 
@@ -265,8 +259,7 @@ impl Monitor {
     ) -> anyhow::Result<Monitor> {
         let physical_monitor = get_physical_monitor(hmonitor)?;
 
-        let device_name = get_device_name(hmonitor)?;
-        let device_id = get_device_id(&device_name)?;
+        let device_id = get_device_id(hmonitor)?;
 
         let friendly_name = friendly_name_map.get(&device_id).unwrap();
 
@@ -282,16 +275,18 @@ impl Monitor {
             capabilities,
         })
     }
+}
 
-    pub fn name(&self) -> &str {
+impl crate::monitor::Monitor for Monitor {
+    fn name(&self) -> &str {
         &self.name
     }
 
-    pub fn capabilities(&self) -> &Capabilities {
+    fn capabilities(&self) -> &Capabilities {
         &self.capabilities
     }
 
-    pub fn input(&self) -> anyhow::Result<Input> {
+    fn input(&self) -> anyhow::Result<Input> {
         let mut value = 0;
         unsafe {
             if GetVCPFeatureAndVCPFeatureReply(
@@ -312,22 +307,6 @@ impl Monitor {
         Ok((value as u8)
             .try_into()
             .expect("the value of a VCP code should be valid"))
-    }
-
-    // pub fn set_input(&self, input: &Input) -> anyhow::Result<()> {}
-}
-
-impl crate::monitor::Monitor for Monitor {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn capabilities(&self) -> &Capabilities {
-        &self.capabilities
-    }
-
-    fn input(&self) -> anyhow::Result<Input> {
-        self.input()
     }
 
     fn set_input(&mut self, input: Input) -> anyhow::Result<()> {
