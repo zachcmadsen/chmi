@@ -1,3 +1,5 @@
+use std::process::ExitCode;
+
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
@@ -11,9 +13,11 @@ pub struct Args {
 enum Command {
     /// List available displays
     List,
+    /// Get a display's current input
+    Get { display: String },
 }
 
-fn main() {
+fn main() -> ExitCode {
     let args = Args::parse();
 
     match args.command {
@@ -23,5 +27,14 @@ fn main() {
                 println!("{display}");
             }
         }
-    }
+        Command::Get { display } => match backend::get_input(&display) {
+            Ok(_) => (),
+            Err(err) => {
+                eprintln!("chmi: error: {}", err);
+                return ExitCode::FAILURE;
+            }
+        },
+    };
+
+    ExitCode::SUCCESS
 }

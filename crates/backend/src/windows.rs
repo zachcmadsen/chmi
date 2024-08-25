@@ -10,6 +10,8 @@ use windows::Win32::{
     Foundation::ERROR_SUCCESS,
 };
 
+use crate::Error;
+
 fn string_from_wide(wide: &[u16]) -> String {
     let len = wide.iter().position(|&c| c == 0).unwrap_or(0);
     OsString::from_wide(&wide[..len])
@@ -108,7 +110,7 @@ pub fn get_display_names() -> Vec<String> {
     names
 }
 
-pub fn get_input(display_name: &str) {
+pub fn get_input(display_name: &str) -> Result<u8, Error> {
     // 1. Validate display_name, i.e., that it shows up in the list from get_display_names.
     // 2. Iterate hmonitors, using their device ID to find the monitor for the given display name.
     // 3. Get the physical montior from the hmonitor
@@ -117,4 +119,18 @@ pub fn get_input(display_name: &str) {
     // 6. Get the value of the VCP code
 
     // Note, all of the steps except the last one are the same between get and set
+
+    let display_paths = get_display_paths();
+
+    let mut ids_and_names = Vec::new();
+    for path in display_paths {
+        let id_and_name = get_device_id_and_name(&path);
+        ids_and_names.push(id_and_name);
+    }
+
+    if !ids_and_names.iter().any(|(_, name)| name == display_name) {
+        return Err(Error::DisplayNotFound(display_name.to_string()));
+    }
+
+    Ok(0)
 }
