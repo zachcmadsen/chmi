@@ -107,3 +107,14 @@ pub fn get_display_names() -> Vec<String> {
 
     names
 }
+
+pub fn get_input(display_name: &str) {
+    // 1. Validate display_name, i.e., that it shows up in the list from get_display_names.
+    // 2. Iterate hmonitors, using their device ID to find the monitor for the given display name.
+    // 3. Get the physical montior from the hmonitor
+    // 4. (Optional) Get the capabilities string
+    // 5. (Optional) Check that it supports the input VCP code
+    // 6. Get the value of the VCP code
+
+    // Note, all of the steps except the last one are the same between get and set
+}
