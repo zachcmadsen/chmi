@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
 #[command(version)]
@@ -9,24 +9,19 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Set a display's input
-    Set {
-        /// The display name
-        display: String,
-        /// The input to switch to
-        #[arg(value_enum)]
-        input: Input,
-    },
-}
-
-#[derive(Clone, Debug, ValueEnum)]
-enum Input {
-    DisplayPort1,
-    DisplayPort2,
-    Hdmi1,
-    Hdmi2,
+    /// List available displays
+    List,
 }
 
 fn main() {
-    let _args = Args::parse();
+    let args = Args::parse();
+
+    match args.command {
+        Command::List => {
+            let displays = backend::get_display_names();
+            for display in displays {
+                println!("{display}");
+            }
+        }
+    }
 }
