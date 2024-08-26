@@ -10,11 +10,13 @@ use windows::{
     Win32::{
         Devices::Display::{
             DisplayConfigGetDeviceInfo, GetDisplayConfigBufferSizes,
-            QueryDisplayConfig, DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
+            GetNumberOfPhysicalMonitorsFromHMONITOR,
+            GetPhysicalMonitorsFromHMONITOR, QueryDisplayConfig,
+            DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
             DISPLAYCONFIG_PATH_INFO, DISPLAYCONFIG_TARGET_DEVICE_NAME,
-            QDC_ONLY_ACTIVE_PATHS,
+            PHYSICAL_MONITOR, QDC_ONLY_ACTIVE_PATHS,
         },
-        Foundation::{BOOL, ERROR_SUCCESS, LPARAM, RECT, TRUE},
+        Foundation::{BOOL, ERROR_SUCCESS, HANDLE, LPARAM, RECT, TRUE},
         Graphics::Gdi::{
             EnumDisplayDevicesA, EnumDisplayMonitors, GetMonitorInfoA,
             DISPLAY_DEVICEA, HDC, HMONITOR, MONITORINFOEXA,
@@ -169,7 +171,6 @@ fn get_device_id(hmonitor: &HMONITOR) -> String {
         cb: mem::size_of::<DISPLAY_DEVICEA>() as u32,
         ..DISPLAY_DEVICEA::default()
     };
-
     unsafe {
         EnumDisplayDevicesA(
             PCSTR::from_raw(device_name.as_ptr() as *const u8),
@@ -197,12 +198,46 @@ fn get_device_id(hmonitor: &HMONITOR) -> String {
         .to_owned()
 }
 
+fn get_physical_monitor(hmonitor: HMONITOR) -> HANDLE {
+    let mut num_physical_monitors: u32 = 0;
+    unsafe {
+        GetNumberOfPhysicalMonitorsFromHMONITOR(
+            hmonitor,
+            ptr::addr_of_mut!(num_physical_monitors),
+        )
+        .unwrap()
+    };
+
+    if num_physical_monitors == 0 {
+        panic!("display monitor has no associated physical monitor");
+    } else if num_physical_monitors > 1 {
+        // I don't know what it means for a display to have multiple
+        // physical monitors. For example, which one would set I VCP codes
+        // on? This is probably a valid scenario, but it's easier to leave
+        // it unhandled for now.
+        panic!(
+            "display monitor has more than one associated physical monitor"
+        );
+    }
+
+    let mut physical_monitor = PHYSICAL_MONITOR::default();
+    unsafe {
+        GetPhysicalMonitorsFromHMONITOR(
+            hmonitor,
+            slice::from_raw_parts_mut(ptr::addr_of_mut!(physical_monitor), 1),
+        )
+        .unwrap()
+    };
+
+    physical_monitor.hPhysicalMonitor
+}
+
 pub fn get_display_names() -> Vec<String> {
     let display_paths = get_display_paths();
 
     let mut names = Vec::new();
     for path in display_paths {
-        let (_id, name) = get_device_id_and_name(&path);
+        let (_, name) = get_device_id_and_name(&path);
         names.push(name);
     }
 
@@ -221,7 +256,7 @@ pub fn get_input(display_name: &str) -> Result<u8, Error> {
 
     let (id, _name) = get_display_paths()
         .iter()
-        .map(|path| get_device_id_and_name(path))
+        .map(get_device_id_and_name)
         .find(|(_, name)| name == display_name)
         .ok_or(Error::DisplayNotFound(display_name.to_string()))?;
 
@@ -233,7 +268,7 @@ pub fn get_input(display_name: &str) -> Result<u8, Error> {
         })
         .ok_or(Error::DisplayNotFound(display_name.to_string()))?;
 
-    eprintln!("hmonitor: {:?}", hmonitor);
+    let _physical_handle = get_physical_monitor(hmonitor);
 
     Ok(0)
 }
