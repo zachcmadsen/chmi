@@ -1,13 +1,25 @@
-use std::{ffi::OsString, mem, os::windows::ffi::OsStringExt, ptr};
+use std::{
+    ffi::{CStr, OsString},
+    mem,
+    os::windows::ffi::OsStringExt,
+    ptr, slice,
+};
 
-use windows::Win32::{
-    Devices::Display::{
-        DisplayConfigGetDeviceInfo, GetDisplayConfigBufferSizes,
-        QueryDisplayConfig, DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
-        DISPLAYCONFIG_PATH_INFO, DISPLAYCONFIG_TARGET_DEVICE_NAME,
-        QDC_ONLY_ACTIVE_PATHS,
+use windows::{
+    core::PCSTR,
+    Win32::{
+        Devices::Display::{
+            DisplayConfigGetDeviceInfo, GetDisplayConfigBufferSizes,
+            QueryDisplayConfig, DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
+            DISPLAYCONFIG_PATH_INFO, DISPLAYCONFIG_TARGET_DEVICE_NAME,
+            QDC_ONLY_ACTIVE_PATHS,
+        },
+        Foundation::{BOOL, ERROR_SUCCESS, LPARAM, RECT, TRUE},
+        Graphics::Gdi::{
+            EnumDisplayDevicesA, EnumDisplayMonitors, GetMonitorInfoA,
+            DISPLAY_DEVICEA, HDC, HMONITOR, MONITORINFOEXA,
+        },
     },
-    Foundation::ERROR_SUCCESS,
 };
 
 use crate::Error;
@@ -98,6 +110,93 @@ fn get_device_id_and_name(path: &DISPLAYCONFIG_PATH_INFO) -> (String, String) {
     (device_id, device_name)
 }
 
+fn get_hmonitors() -> Vec<HMONITOR> {
+    unsafe extern "system" fn enum_display_monitors_callback(
+        hmonitor: HMONITOR,
+        _: HDC,
+        _: *mut RECT,
+        data: LPARAM,
+    ) -> BOOL {
+        let hmonitors = &mut *(data.0 as *mut Vec<HMONITOR>);
+        hmonitors.push(hmonitor);
+
+        // Return TRUE to continue the enumeration.
+        TRUE
+    }
+
+    let mut hmonitors = Vec::new();
+
+    unsafe {
+        // Pass None, i.e., NULL, for the first two parameters to enumerate
+        // all display monitors.
+        EnumDisplayMonitors(
+            None,
+            None,
+            Some(enum_display_monitors_callback),
+            LPARAM(ptr::addr_of_mut!(hmonitors) as _),
+        )
+        .ok()
+        .unwrap();
+    }
+
+    hmonitors
+}
+
+fn get_device_id(hmonitor: &HMONITOR) -> String {
+    let mut monitor_info = MONITORINFOEXA::default();
+    monitor_info.monitorInfo.cbSize = mem::size_of_val(&monitor_info) as u32;
+    unsafe {
+        GetMonitorInfoA(*hmonitor, ptr::addr_of_mut!(monitor_info) as _)
+            .ok()
+            .unwrap()
+    };
+
+    let device_name_bytes = unsafe {
+        slice::from_raw_parts(
+            monitor_info.szDevice.as_ptr() as _,
+            monitor_info.szDevice.len(),
+        )
+    };
+    // The documentation for MONITORINFOEXA doesn't say that the string in
+    // szDevice is null-terminated. Because the MONITORINFOEXA struct is
+    // zeroed, it's effectively null-terminated when the name is less than
+    // 32 characters (the size of szDevice). Hopefully device names are
+    // always less than 32 characters...
+    let device_name = CStr::from_bytes_until_nul(device_name_bytes)
+        .expect("display monitor device names should be null-terminated");
+
+    let mut display_device = DISPLAY_DEVICEA {
+        cb: mem::size_of::<DISPLAY_DEVICEA>() as u32,
+        ..DISPLAY_DEVICEA::default()
+    };
+
+    unsafe {
+        EnumDisplayDevicesA(
+            PCSTR::from_raw(device_name.as_ptr() as *const u8),
+            0,
+            ptr::addr_of_mut!(display_device),
+            1,
+        )
+        .ok()
+        .unwrap()
+    };
+
+    let device_id_bytes = unsafe {
+        slice::from_raw_parts(
+            display_device.DeviceID.as_ptr() as _,
+            display_device.DeviceID.len(),
+        )
+    };
+    // See the comment above about null-terminated strings for szDevice.
+    let device_id = CStr::from_bytes_until_nul(device_id_bytes)
+        .expect("display device IDs should be null-terminated");
+
+    device_id
+        .to_str()
+        .expect("display device IDs should be valid UTF-8")
+        .to_owned()
+}
+
 pub fn get_display_names() -> Vec<String> {
     let display_paths = get_display_paths();
 
@@ -120,17 +219,21 @@ pub fn get_input(display_name: &str) -> Result<u8, Error> {
 
     // Note, all of the steps except the last one are the same between get and set
 
-    let display_paths = get_display_paths();
+    let (id, _name) = get_display_paths()
+        .iter()
+        .map(|path| get_device_id_and_name(path))
+        .find(|(_, name)| name == display_name)
+        .ok_or(Error::DisplayNotFound(display_name.to_string()))?;
 
-    let mut ids_and_names = Vec::new();
-    for path in display_paths {
-        let id_and_name = get_device_id_and_name(&path);
-        ids_and_names.push(id_and_name);
-    }
+    let hmonitor = get_hmonitors()
+        .into_iter()
+        .find(|hmonitor| {
+            let device_id = get_device_id(hmonitor);
+            device_id == id
+        })
+        .ok_or(Error::DisplayNotFound(display_name.to_string()))?;
 
-    if !ids_and_names.iter().any(|(_, name)| name == display_name) {
-        return Err(Error::DisplayNotFound(display_name.to_string()));
-    }
+    eprintln!("hmonitor: {:?}", hmonitor);
 
     Ok(0)
 }
