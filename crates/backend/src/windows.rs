@@ -11,12 +11,12 @@ use windows::{
         Devices::Display::{
             DisplayConfigGetDeviceInfo, GetDisplayConfigBufferSizes,
             GetNumberOfPhysicalMonitorsFromHMONITOR,
-            GetPhysicalMonitorsFromHMONITOR, QueryDisplayConfig,
-            DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
+            GetPhysicalMonitorsFromHMONITOR, GetVCPFeatureAndVCPFeatureReply,
+            QueryDisplayConfig, DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
             DISPLAYCONFIG_PATH_INFO, DISPLAYCONFIG_TARGET_DEVICE_NAME,
             PHYSICAL_MONITOR, QDC_ONLY_ACTIVE_PATHS,
         },
-        Foundation::{BOOL, ERROR_SUCCESS, HANDLE, LPARAM, RECT, TRUE},
+        Foundation::{BOOL, ERROR_SUCCESS, FALSE, HANDLE, LPARAM, RECT, TRUE},
         Graphics::Gdi::{
             EnumDisplayDevicesA, EnumDisplayMonitors, GetMonitorInfoA,
             DISPLAY_DEVICEA, HDC, HMONITOR, MONITORINFOEXA,
@@ -25,6 +25,8 @@ use windows::{
 };
 
 use crate::Error;
+
+const INPUT_SELECT_VCP_CODE: u8 = 0x60;
 
 fn string_from_wide(wide: &[u16]) -> String {
     let len = wide.iter().position(|&c| c == 0).unwrap_or(0);
@@ -268,7 +270,24 @@ pub fn get_input(display_name: &str) -> Result<u8, Error> {
         })
         .ok_or(Error::DisplayNotFound(display_name.to_string()))?;
 
-    let _physical_handle = get_physical_monitor(hmonitor);
+    let physical_handle = get_physical_monitor(hmonitor);
 
-    Ok(0)
+    let mut value = 0;
+    if unsafe {
+        GetVCPFeatureAndVCPFeatureReply(
+            physical_handle,
+            INPUT_SELECT_VCP_CODE,
+            None,
+            ptr::addr_of_mut!(value),
+            None,
+        )
+    } == FALSE.0
+    {
+        panic!(
+            "failed to retrieve the value of VCP code {} for monitor '{}'",
+            INPUT_SELECT_VCP_CODE, _name
+        );
+    }
+
+    Ok(value as u8)
 }
