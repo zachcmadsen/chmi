@@ -8,9 +8,11 @@ mod platform;
 pub enum Error {
     #[error("unable to find display '{0}'")]
     DisplayNotFound(String),
+    #[error("unexpected OS error, try '--verbose' for more information")]
+    Os,
 }
 
-pub fn get_display_names() -> Vec<String> {
+pub fn get_display_names() -> Result<Vec<String>, Error> {
     platform::get_display_names()
 }
 

@@ -56,12 +56,17 @@ fn main() -> ExitCode {
     let args = Args::parse();
 
     match args.command {
-        Command::List => {
-            let displays = backend::get_display_names();
-            for display in displays {
-                println!("{display}");
+        Command::List => match backend::get_display_names() {
+            Ok(displays) => {
+                for display in displays {
+                    println!("{display}");
+                }
             }
-        }
+            Err(err) => {
+                eprintln!("chmi: error: {}", err);
+                return ExitCode::FAILURE;
+            }
+        },
         Command::Get { display } => match backend::get_input(&display) {
             Ok(value) => {
                 println!(

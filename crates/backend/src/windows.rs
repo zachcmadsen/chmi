@@ -26,6 +26,13 @@ use windows::{
 
 use crate::Error;
 
+impl From<windows::core::Error> for Error {
+    fn from(_value: windows::core::Error) -> Self {
+        // TODO: Log the error.
+        Error::Os
+    }
+}
+
 const INPUT_SELECT_VCP_CODE: u8 = 0x60;
 
 fn string_from_wide(wide: &[u16]) -> String {
@@ -36,7 +43,7 @@ fn string_from_wide(wide: &[u16]) -> String {
         .to_string()
 }
 
-fn get_display_paths() -> Vec<DISPLAYCONFIG_PATH_INFO> {
+fn get_display_paths() -> Result<Vec<DISPLAYCONFIG_PATH_INFO>, Error> {
     let mut num_paths = 0;
     let mut num_modes = 0;
     // SAFETY:
@@ -49,8 +56,7 @@ fn get_display_paths() -> Vec<DISPLAYCONFIG_PATH_INFO> {
             ptr::addr_of_mut!(num_modes),
         )
         .ok()
-        .unwrap()
-    };
+    }?;
 
     let mut paths = Vec::with_capacity(num_paths as usize);
     let mut modes = Vec::with_capacity(num_modes as usize);
@@ -75,8 +81,7 @@ fn get_display_paths() -> Vec<DISPLAYCONFIG_PATH_INFO> {
             None,
         )
         .ok()
-        .unwrap()
-    };
+    }?;
 
     // The updated numbers of elements shouldn't be greater than the initial
     // numbers.
@@ -91,7 +96,7 @@ fn get_display_paths() -> Vec<DISPLAYCONFIG_PATH_INFO> {
         modes.set_len(num_modes as usize)
     };
 
-    paths
+    Ok(paths)
 }
 
 fn get_device_id_and_name(path: &DISPLAYCONFIG_PATH_INFO) -> (String, String) {
@@ -234,8 +239,8 @@ fn get_physical_monitor(hmonitor: HMONITOR) -> HANDLE {
     physical_monitor.hPhysicalMonitor
 }
 
-pub fn get_display_names() -> Vec<String> {
-    let display_paths = get_display_paths();
+pub fn get_display_names() -> Result<Vec<String>, Error> {
+    let display_paths = get_display_paths()?;
 
     let mut names = Vec::new();
     for path in display_paths {
@@ -243,7 +248,7 @@ pub fn get_display_names() -> Vec<String> {
         names.push(name);
     }
 
-    names
+    Ok(names)
 }
 
 pub fn get_input(display_name: &str) -> Result<u8, Error> {
@@ -256,7 +261,7 @@ pub fn get_input(display_name: &str) -> Result<u8, Error> {
 
     // Note, all of the steps except the last one are the same between get and set
 
-    let (id, _name) = get_display_paths()
+    let (id, _name) = get_display_paths()?
         .iter()
         .map(get_device_id_and_name)
         .find(|(_, name)| name == display_name)
