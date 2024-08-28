@@ -16,7 +16,7 @@ use windows::{
             DISPLAYCONFIG_PATH_INFO, DISPLAYCONFIG_TARGET_DEVICE_NAME,
             PHYSICAL_MONITOR, QDC_ONLY_ACTIVE_PATHS,
         },
-        Foundation::{BOOL, ERROR_SUCCESS, FALSE, HANDLE, LPARAM, RECT, TRUE},
+        Foundation::{BOOL, HANDLE, LPARAM, RECT, TRUE, WIN32_ERROR},
         Graphics::Gdi::{
             EnumDisplayDevicesA, EnumDisplayMonitors, GetMonitorInfoA,
             DISPLAY_DEVICEA, HDC, HMONITOR, MONITORINFOEXA,
@@ -26,14 +26,14 @@ use windows::{
 
 use crate::Error;
 
+const INPUT_SELECT_VCP_CODE: u8 = 0x60;
+
 impl From<windows::core::Error> for Error {
     fn from(_value: windows::core::Error) -> Self {
         // TODO: Log the error.
         Error::Os
     }
 }
-
-const INPUT_SELECT_VCP_CODE: u8 = 0x60;
 
 fn string_from_wide(wide: &[u16]) -> String {
     let len = wide.iter().position(|&c| c == 0).unwrap_or(0);
@@ -99,7 +99,9 @@ fn get_display_paths() -> Result<Vec<DISPLAYCONFIG_PATH_INFO>, Error> {
     Ok(paths)
 }
 
-fn get_device_id_and_name(path: &DISPLAYCONFIG_PATH_INFO) -> (String, String) {
+fn get_device_id_and_name(
+    path: &DISPLAYCONFIG_PATH_INFO,
+) -> Result<(String, String), Error> {
     let mut target = DISPLAYCONFIG_TARGET_DEVICE_NAME::default();
     target.header.adapterId = path.targetInfo.adapterId;
     target.header.id = path.targetInfo.id;
@@ -109,17 +111,15 @@ fn get_device_id_and_name(path: &DISPLAYCONFIG_PATH_INFO) -> (String, String) {
     let rc = unsafe {
         DisplayConfigGetDeviceInfo(ptr::addr_of_mut!(target.header))
     };
-    if rc as u32 != ERROR_SUCCESS.0 {
-        todo!()
-    }
+    WIN32_ERROR(rc as u32).ok()?;
 
     let device_id = string_from_wide(&target.monitorDevicePath);
     let device_name = string_from_wide(&target.monitorFriendlyDeviceName);
 
-    (device_id, device_name)
+    Ok((device_id, device_name))
 }
 
-fn get_hmonitors() -> Vec<HMONITOR> {
+fn get_hmonitors() -> Result<Vec<HMONITOR>, Error> {
     unsafe extern "system" fn enum_display_monitors_callback(
         hmonitor: HMONITOR,
         _: HDC,
@@ -145,20 +145,17 @@ fn get_hmonitors() -> Vec<HMONITOR> {
             LPARAM(ptr::addr_of_mut!(hmonitors) as _),
         )
         .ok()
-        .unwrap();
-    }
+    }?;
 
-    hmonitors
+    Ok(hmonitors)
 }
 
-fn get_device_id(hmonitor: &HMONITOR) -> String {
+fn get_device_id(hmonitor: &HMONITOR) -> Result<String, Error> {
     let mut monitor_info = MONITORINFOEXA::default();
     monitor_info.monitorInfo.cbSize = mem::size_of_val(&monitor_info) as u32;
     unsafe {
-        GetMonitorInfoA(*hmonitor, ptr::addr_of_mut!(monitor_info) as _)
-            .ok()
-            .unwrap()
-    };
+        GetMonitorInfoA(*hmonitor, ptr::addr_of_mut!(monitor_info) as _).ok()
+    }?;
 
     let device_name_bytes = unsafe {
         slice::from_raw_parts(
@@ -186,8 +183,7 @@ fn get_device_id(hmonitor: &HMONITOR) -> String {
             1,
         )
         .ok()
-        .unwrap()
-    };
+    }?;
 
     let device_id_bytes = unsafe {
         slice::from_raw_parts(
@@ -199,21 +195,20 @@ fn get_device_id(hmonitor: &HMONITOR) -> String {
     let device_id = CStr::from_bytes_until_nul(device_id_bytes)
         .expect("display device IDs should be null-terminated");
 
-    device_id
+    Ok(device_id
         .to_str()
         .expect("display device IDs should be valid UTF-8")
-        .to_owned()
+        .to_owned())
 }
 
-fn get_physical_monitor(hmonitor: HMONITOR) -> HANDLE {
+fn get_physical_monitor(hmonitor: HMONITOR) -> Result<HANDLE, Error> {
     let mut num_physical_monitors: u32 = 0;
     unsafe {
         GetNumberOfPhysicalMonitorsFromHMONITOR(
             hmonitor,
             ptr::addr_of_mut!(num_physical_monitors),
         )
-        .unwrap()
-    };
+    }?;
 
     if num_physical_monitors == 0 {
         panic!("display monitor has no associated physical monitor");
@@ -233,10 +228,9 @@ fn get_physical_monitor(hmonitor: HMONITOR) -> HANDLE {
             hmonitor,
             slice::from_raw_parts_mut(ptr::addr_of_mut!(physical_monitor), 1),
         )
-        .unwrap()
-    };
+    }?;
 
-    physical_monitor.hPhysicalMonitor
+    Ok(physical_monitor.hPhysicalMonitor)
 }
 
 pub fn get_display_names() -> Result<Vec<String>, Error> {
@@ -244,7 +238,7 @@ pub fn get_display_names() -> Result<Vec<String>, Error> {
 
     let mut names = Vec::new();
     for path in display_paths {
-        let (_, name) = get_device_id_and_name(&path);
+        let (_, name) = get_device_id_and_name(&path)?;
         names.push(name);
     }
 
@@ -263,22 +257,22 @@ pub fn get_input(display_name: &str) -> Result<u8, Error> {
 
     let (id, _name) = get_display_paths()?
         .iter()
-        .map(get_device_id_and_name)
+        .flat_map(get_device_id_and_name)
         .find(|(_, name)| name == display_name)
         .ok_or(Error::DisplayNotFound(display_name.to_string()))?;
 
-    let hmonitor = get_hmonitors()
+    let hmonitor = get_hmonitors()?
         .into_iter()
         .find(|hmonitor| {
-            let device_id = get_device_id(hmonitor);
-            device_id == id
+            get_device_id(hmonitor).is_ok_and(|device_id| device_id == id)
         })
         .ok_or(Error::DisplayNotFound(display_name.to_string()))?;
 
-    let physical_handle = get_physical_monitor(hmonitor);
+    let physical_handle = get_physical_monitor(hmonitor)?;
 
     let mut value = 0;
-    if unsafe {
+
+    let result = unsafe {
         GetVCPFeatureAndVCPFeatureReply(
             physical_handle,
             INPUT_SELECT_VCP_CODE,
@@ -286,13 +280,8 @@ pub fn get_input(display_name: &str) -> Result<u8, Error> {
             ptr::addr_of_mut!(value),
             None,
         )
-    } == FALSE.0
-    {
-        panic!(
-            "failed to retrieve the value of VCP code {} for monitor '{}'",
-            INPUT_SELECT_VCP_CODE, _name
-        );
-    }
+    };
+    BOOL(result).ok()?;
 
     Ok(value as u8)
 }
