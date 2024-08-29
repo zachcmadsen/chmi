@@ -20,6 +20,7 @@ pub fn get_input(display_name: &str) -> Result<u8, Error> {
     platform::get_input(display_name)
 }
 
+// TODO: Check that the input actually changed after setting it?
 pub fn set_input(_display_name: &str, _input: u8) {
     todo!()
 }
